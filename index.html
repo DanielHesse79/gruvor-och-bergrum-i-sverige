@@ -199,13 +199,14 @@ const layerControl = L.control.layers(
   }
 })();
 
-// GPS "visa min position" + mobiloptimering
+// GPS "visa min position" + minimerbara filterrutor + mobiloptimering
 (function(){
-  // --- Injicera mobil-CSS ---
+  const isMobile = window.matchMedia('(max-width:640px)').matches;
   const css = `
   .leaflet-control-locate a{font-size:18px;line-height:30px;text-align:center;cursor:pointer}
   .leaflet-control-locate a.locating{animation:locpulse 1s infinite}
   @keyframes locpulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .lc-title{cursor:pointer;font-weight:600;font-size:12px;padding:1px 2px 6px;user-select:none;white-space:nowrap}
   @media (max-width:640px){
     .hdr{max-width:60vw;padding:6px 9px;left:44px;top:8px}
     .hdr h1{font-size:13px;margin-bottom:1px}
@@ -213,7 +214,7 @@ const layerControl = L.control.layers(
     .hdr .cnt{font-size:10px}
     #search{width:42vw;font-size:12px;padding:6px 8px}
     #hits{width:62vw;max-height:40vh}
-    #ampanel{max-width:96vw;left:6px;right:6px;bottom:8px;font-size:11px;max-height:40vh;overflow:auto;padding:8px 10px}
+    #ampanel{max-width:96vw;left:6px;right:6px;bottom:8px;font-size:11px;max-height:42vh;overflow:auto;padding:8px 10px}
     #ampanel h2{font-size:12px}
     .chip{padding:5px 11px;margin:3px 4px 3px 0}
     .leaflet-control-layers-expanded{max-height:58vh;overflow:auto;font-size:12px;max-width:74vw}
@@ -221,7 +222,6 @@ const layerControl = L.control.layers(
   }`;
   const st=document.createElement('style'); st.textContent=css; document.head.appendChild(st);
 
-  // --- Locate-kontroll ---
   let posMarker=null, accCircle=null;
   const LocateCtl = L.Control.extend({
     options:{position:'topleft'},
@@ -229,24 +229,18 @@ const layerControl = L.control.layers(
       const c=L.DomUtil.create('div','leaflet-bar leaflet-control leaflet-control-locate');
       const a=L.DomUtil.create('a','',c);
       a.href='#'; a.title='Visa min position'; a.innerHTML='📍'; a.setAttribute('role','button');
-      L.DomEvent.on(a,'click',function(e){
-        L.DomEvent.stop(e);
-        a.classList.add('locating');
-        map.locate({setView:true, maxZoom:14, enableHighAccuracy:true, timeout:15000});
-      });
+      L.DomEvent.on(a,'click',function(e){ L.DomEvent.stop(e); a.classList.add('locating');
+        map.locate({setView:true, maxZoom:14, enableHighAccuracy:true, timeout:15000}); });
       this._a=a; return c;
     }
   });
-  const locateCtl = new LocateCtl();
-  map.addControl(locateCtl);
-
+  const locateCtl = new LocateCtl(); map.addControl(locateCtl);
   map.on('locationfound', function(e){
     locateCtl._a.classList.remove('locating');
     const r=e.accuracy||50;
     if(posMarker){ posMarker.setLatLng(e.latlng); } else {
       posMarker=L.circleMarker(e.latlng,{radius:7,color:'#fff',weight:2,fillColor:'#1a73e8',fillOpacity:1})
-        .bindPopup('Din position (±'+Math.round(r)+' m)');
-      posMarker.addTo(map);
+        .bindPopup('Din position (±'+Math.round(r)+' m)').addTo(map);
     }
     if(accCircle){ accCircle.setLatLng(e.latlng).setRadius(r); } else {
       accCircle=L.circle(e.latlng,{radius:r,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:0.12}).addTo(map);
@@ -254,17 +248,29 @@ const layerControl = L.control.layers(
   });
   map.on('locationerror', function(e){
     locateCtl._a.classList.remove('locating');
-    alert('Kunde inte hämta din position: '+(e.message||'okänt fel')+'\\n(Tillåt platsåtkomst i webbläsaren och prova igen.)');
+    alert('Kunde inte hämta din position: '+(e.message||'okänt fel')+'\nTillåt platsåtkomst i webbläsaren och prova igen.');
   });
 
-  // --- Fäll ihop tunga paneler på små skärmar ---
-  if (window.matchMedia('(max-width:640px)').matches){
-    // lagerväljaren ihopfälld
-    if (typeof layerControl!=='undefined'){
-      layerControl.options.collapsed=true;
-      if (layerControl._collapse) layerControl._collapse();
+  // Minimerbar lagerruta (egen toggle, funkar på alla skärmar)
+  setTimeout(function(){
+    const lc=document.querySelector('.leaflet-control-layers');
+    if(lc){
+      const list=lc.querySelector('.leaflet-control-layers-list');
+      if(list){
+        let open=!isMobile;
+        const bar=document.createElement('div');
+        bar.className='lc-title';
+        L.DomEvent.disableClickPropagation(bar);
+        function render(){ list.style.display=open?'':'none'; bar.innerHTML='🗂️ Kartlager '+(open?'▾':'▸'); }
+        bar.addEventListener('click', function(){ open=!open; render(); });
+        lc.insertBefore(bar, list);
+        render();
+      }
     }
-    // ämnesfiltret ihopfällt (om panelen finns)
+  }, 0);
+
+  // Fäll ihop ämnesfiltret på mobil
+  if (isMobile){
     const at=document.getElementById('amtoggle');
     if (at) at.click();
   }
