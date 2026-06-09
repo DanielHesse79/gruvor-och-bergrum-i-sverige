@@ -173,40 +173,23 @@ const layerControl = L.control.layers(
   [`🟡 Skyddsrum (${nSky})`]:layers.skyddsrum,
   [`▱ Mineralrättigheter (${nMR})`]:layers.mineral},{collapsed:false}).addTo(map);
 // SGU WMS-visningstjänster som tändbara overlays (färdiga produkter från SGU).
-// Berggrund + bergartskemi stöder EPSG:3857 → vanliga kakel-WMS.
-// Mineralresurser + magnetfält stöder bara 4326/3006 → viewport-bild i 4326.
+// OBS: GetMap måste gå till GeoServer-backend (maps3.sgu.se/geoserver) med
+// namespace-prefixade lagernamn (workspace:layer). Alla stöder EPSG:3857.
 (function(){
-  // --- Tiled WMS (EPSG:3857) ---
-  const wmsBerg = L.tileLayer.wms('https://resource.sgu.se/service/wms/130/berggrund-50-250-tusen?', {
-    layers:'BERG_50K_geologisk_enhet_yta', format:'image/png', transparent:true, version:'1.3.0',
-    opacity:0.55, attribution:'© SGU Berggrund'});
-  const wmsKemi = L.tileLayer.wms('https://resource.sgu.se/service/wms/130/bergartskemi?', {
-    layers:'BERGARTSKEMI_cu', format:'image/png', transparent:true, version:'1.3.0',
-    attribution:'© SGU Bergartskemi'});
-
-  // --- Viewport-bild WMS (EPSG:4326) för tjänster utan 3857 ---
-  function wms4326(base, layer, opacity){
-    const grp = L.layerGroup();
-    let cur=null;
-    function refresh(){
-      if(!map.hasLayer(grp)) return;
-      const b=map.getBounds(), s=map.getSize();
-      const sw=b.getSouthWest(), ne=b.getNorthEast();
-      // WMS 1.3.0 + EPSG:4326 har axelordning lat,lon
-      const bbox=[sw.lat,sw.lng,ne.lat,ne.lng].join(',');
-      const url=base+'?service=WMS&request=GetMap&version=1.3.0&layers='+encodeURIComponent(layer)
-        +'&styles=&crs=EPSG:4326&format=image/png&transparent=true&width='+Math.round(s.x)+'&height='+Math.round(s.y)+'&bbox='+bbox;
-      const img=L.imageOverlay(url, b, {opacity:opacity||0.75});
-      img.addTo(grp);
-      if(cur) setTimeout(()=>grp.removeLayer(cur), 250);
-      cur=img;
-    }
-    grp.on('add', ()=>{ refresh(); map.on('moveend zoomend resize', refresh); });
-    grp.on('remove', ()=>{ map.off('moveend zoomend resize', refresh); if(cur){grp.removeLayer(cur);cur=null;} });
-    return grp;
+  function wms(base, layer, opts){
+    opts = opts || {};
+    return L.tileLayer.wms(base, {
+      layers: layer, format:'image/png', transparent:true, version:'1.3.0',
+      opacity: opts.opacity!=null ? opts.opacity : 1,
+      attribution:'© SGU'
+    });
   }
-  const wmsMalm   = wms4326('https://resource.sgu.se/service/wms/130/mineralresurser','MALM_Mineralresurser',0.85);
-  const wmsMagnet = wms4326('https://resource.sgu.se/service/wms/130/flyggeofysik-magnet','FYSIK_Magnet',0.55);
+  const BERG='https://maps3.sgu.se/geoserver/berg/ows';
+  const FYSIK='https://maps3.sgu.se/geoserver/fysik/ows';
+  const wmsBerg   = wms(BERG, 'berg:SE.GOV.SGU.BERG.GEOLOGISK_ENHET.YTA.50K', {opacity:0.55});
+  const wmsMalm   = wms(BERG, 'berg:SE.GOV.SGU.MALM.MINERALRESURSER_VY');
+  const wmsKemi   = wms(BERG, 'berg:SE.GOV.SGU.BERGARTSKEMI.CU');
+  const wmsMagnet = wms(FYSIK,'fysik:SE.GOV.SGU.MAGNET', {opacity:0.55});
 
   if (typeof layerControl !== 'undefined') {
     layerControl.addOverlay(wmsBerg,   '🗺️ SGU Berggrundskarta (WMS)');
